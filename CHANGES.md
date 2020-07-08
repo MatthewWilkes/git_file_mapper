@@ -2,4 +2,4 @@
 
 ### 1.0.0 (Unreleased)
 
-* Generated from skeleton
+* Initial release of mapping tool
