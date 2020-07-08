@@ -48,7 +48,6 @@ def transform_tree(tree: git.Tree, transformer: TRANSFORMER) -> git.Tree:
                 new_tree = transform_tree(subtree, transformer)
             else:
                 new_tree = subtree
-            hashes[subtree.binsha] = new_tree.binsha
             contents.append((new_tree.binsha, stat.S_IFDIR, subtree.name))
 
         with BytesIO() as new_tree_stream:
@@ -58,15 +57,17 @@ def transform_tree(tree: git.Tree, transformer: TRANSFORMER) -> git.Tree:
             new_tree_obj = tree.repo.odb.store(
                 IStream(git.Tree.type, length, new_tree_stream)
             )
+        hashes[tree.binsha] = new_tree_obj.binsha
     else:
         binsha = hashes[tree.binsha]
-        new_tree_obj = blob.repo.odb.info(binsha)
+        new_tree_obj = tree.repo.odb.info(binsha)
 
     new_tree = tree.repo.tree(new_tree_obj.hexsha.decode("ascii"))
     return new_tree
 
 
 def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit:
+    hashes = hash_mapping.get()
     new_tree = transform_tree(commit.tree, transformer)
     author_datetime = "{} {}".format(
         commit.authored_date, altz_to_utctz_str(commit.author_tz_offset)
@@ -86,16 +87,20 @@ def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit
         author_date=author_datetime,
         commit_date=committer_datetime,
     )
+    hashes[commit.binsha] = new_commit.binsha
     return new_commit
 
 
 def map_commits(
     repo: git.Repo, transformer: TRANSFORMER
 ) -> t.Dict[git.Commit, git.Commit]:
-    hash_mapping.set({})
+    token = hash_mapping.set({})
     commit_mapping = {}
-    for commit in repo.iter_commits():
-        new_commit = transform_commit(commit, transformer)
-        commit_mapping[commit] = new_commit
-        print(f"{commit} becomes {new_commit}")
+    try:
+        for commit in repo.iter_commits():
+            new_commit = transform_commit(commit, transformer)
+            commit_mapping[commit] = new_commit
+            print(f"{commit} becomes {new_commit}")
+    finally:
+        hash_mapping.reset(token)
     return commit_mapping

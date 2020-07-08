@@ -4,7 +4,12 @@ import tempfile
 import git
 import pytest
 
-from git_file_mapper.mapper import map_commits
+from git_file_mapper.mapper import (
+    map_commits,
+    transform_commit,
+    transform_blob,
+    hash_mapping,
+)
 
 
 def world_transformer(filename: str, contents: bytes) -> bytes:
@@ -21,6 +26,16 @@ def root():
 def empty_git_repo(root):
     repo = git.Repo.init(root)
     return repo
+
+
+@pytest.fixture
+def transform_data():
+    data = {}
+    token = hash_mapping.set(data)
+    try:
+        yield data
+    finally:
+        hash_mapping.reset(token)
 
 
 @pytest.fixture
@@ -57,3 +72,26 @@ def test_apply_mapper(git_repo):
     assert first.author == new_first.author
     assert first.authored_datetime == new_first.authored_datetime
     assert new_HEAD.parents == [new_first]
+
+
+def test_convert_individual_commit(git_repo, transform_data):
+    HEAD = git_repo.head.commit
+    first = HEAD.parents[0]
+    transform_commit(first, world_transformer)
+
+    # We should have transformed the commit, the root tree and one file
+    assert len(transform_data) == 3
+
+    new_first_binsha = transform_data[first.binsha]
+    new_first_hexsha = git_repo.odb.info(new_first_binsha).hexsha
+    new_first = git_repo.commit(new_first_hexsha.decode("ascii"))
+
+    assert '+print("hello planet")' in git_repo.git.show(new_first)
+
+
+def test_convert_commit_includes_parents(git_repo, transform_data):
+    HEAD = git_repo.head.commit
+    transform_commit(HEAD, world_transformer)
+
+    # We should have transformed the commit, the root tree and one file for 2 commits
+    assert len(transform_data) == 6
