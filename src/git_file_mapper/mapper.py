@@ -89,8 +89,13 @@ def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit
     return new_commit
 
 
-def map_commits(repo: git.Repo, transformer: TRANSFORMER):
+def map_commits(
+    repo: git.Repo, transformer: TRANSFORMER
+) -> t.Dict[git.Commit, git.Commit]:
     hash_mapping.set({})
+    commit_mapping = {}
     for commit in repo.iter_commits():
         new_commit = transform_commit(commit, transformer)
+        commit_mapping[commit] = new_commit
         print(f"{commit} becomes {new_commit}")
+    return commit_mapping
