@@ -7,7 +7,6 @@ import pytest
 from git_file_mapper.mapper import (
     map_commits,
     transform_commit,
-    transform_blob,
     hash_mapping,
 )
 
@@ -56,6 +55,35 @@ def git_repo(root, empty_git_repo):
     return repo
 
 
+@pytest.fixture
+def suffixer(request):
+    def add_suffix(reference_name: str) -> str:
+        return reference_name + "_" + request.function.__name__
+
+    return add_suffix
+
+
+@pytest.fixture
+def branched_git_repo(root, git_repo):
+    repo = git_repo
+
+    master = repo.branches[0]
+    first_commit = git_repo.commit().parents[0]
+
+    branch = repo.create_head("two", commit=first_commit)
+    branch.checkout()
+    filename = os.path.join(root, "one.py")
+    with open(filename, "a", encoding="utf-8") as pfile:
+        pfile.write('print("is it my world you\'re looking for?")\n')
+    repo.index.add([filename])
+    repo.index.commit("Lionelise")
+
+    repo.create_tag("first", first_commit)
+    master.checkout()
+
+    return repo
+
+
 def test_apply_mapper(git_repo):
     replaced = map_commits(git_repo, world_transformer)
 
@@ -72,6 +100,25 @@ def test_apply_mapper(git_repo):
     assert first.author == new_first.author
     assert first.authored_datetime == new_first.authored_datetime
     assert new_HEAD.parents == [new_first]
+
+
+def test_apply_mapper_finds_branches(branched_git_repo):
+    replaced = map_commits(branched_git_repo, world_transformer)
+
+    HEAD = branched_git_repo.commit("two")
+    new_HEAD = replaced[HEAD]
+    assert "is it my planet you're looking for" in branched_git_repo.git.show(new_HEAD)
+
+
+def test_apply_mapper_renames_branches_if_renamer_supplied(branched_git_repo, suffixer):
+    assert len(branched_git_repo.branches) == 2
+    replaced = map_commits(branched_git_repo, world_transformer, suffixer)
+
+    assert len(branched_git_repo.branches) == 4
+
+    master_sha = branched_git_repo.commit("master")
+    new_master_sha = branched_git_repo.commit(suffixer("master"))
+    assert replaced[master_sha] == new_master_sha
 
 
 def test_convert_individual_commit(git_repo, transform_data):

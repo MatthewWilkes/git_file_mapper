@@ -12,7 +12,13 @@ from gitdb.base import IStream
 hash_mapping: contextvars.ContextVar[t.Dict[bytes, bytes]] = contextvars.ContextVar(
     "hash_mapping"
 )
+
+progress_indicator: contextvars.ContextVar[
+    t.Callable[[int], t.Any]
+] = contextvars.ContextVar("progress_indicator")
+
 TRANSFORMER = t.Callable[[str, bytes], bytes]
+REF_GENERATOR = t.Callable[[str], str]
 
 
 def null_transformer(filename: str, contents: bytes) -> bytes:
@@ -92,15 +98,32 @@ def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit
 
 
 def map_commits(
-    repo: git.Repo, transformer: TRANSFORMER
+    repo: git.Repo,
+    transformer: TRANSFORMER,
+    reference_name_generator: t.Optional[REF_GENERATOR] = None,
 ) -> t.Dict[git.Commit, git.Commit]:
     token = hash_mapping.set({})
     commit_mapping = {}
+    progress: t.Optional[t.Callable[[int], t.Any]]
     try:
-        for commit in repo.iter_commits():
-            new_commit = transform_commit(commit, transformer)
-            commit_mapping[commit] = new_commit
-            print(f"{commit} becomes {new_commit}")
+        progress = progress_indicator.get()
+    except LookupError:
+        progress = None
+
+    try:
+        for branch in repo.branches + repo.tags:
+            for commit in repo.iter_commits(branch):
+                new_commit = transform_commit(commit, transformer)
+                commit_mapping[commit] = new_commit
+                if progress:
+                    progress(1)
+            if reference_name_generator:
+                new_name = reference_name_generator(branch.name)
+                new_head = commit_mapping[branch.commit]
+                if isinstance(branch, git.refs.Head):
+                    repo.create_head(new_name, commit=new_head)
+                elif isinstance(branch, git.refs.TagReference):
+                    repo.create_tag(new_name, ref=new_head)
     finally:
         hash_mapping.reset(token)
     return commit_mapping
