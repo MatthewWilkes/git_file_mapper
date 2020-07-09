@@ -17,15 +17,22 @@ progress_indicator: contextvars.ContextVar[
     t.Callable[[int], t.Any]
 ] = contextvars.ContextVar("progress_indicator")
 
-TRANSFORMER = t.Callable[[str, bytes], bytes]
-REF_GENERATOR = t.Callable[[str], str]
+
+class Transformer(t.Protocol):
+    def __call__(self, filename: str, contents: bytes) -> bytes:
+        ...
+
+
+class ReferenceNamer(t.Protocol):
+    def __call__(self, reference_name: str) -> str:
+        ...
 
 
 def null_transformer(filename: str, contents: bytes) -> bytes:
     return contents
 
 
-def transform_blob(blob: git.Blob, transformer: TRANSFORMER) -> git.Blob:
+def transform_blob(blob: git.Blob, transformer: Transformer) -> git.Blob:
     hashes = hash_mapping.get()
     if blob.binsha not in hashes:
         new_contents = transformer(blob.path, blob.data_stream.read())
@@ -40,7 +47,7 @@ def transform_blob(blob: git.Blob, transformer: TRANSFORMER) -> git.Blob:
     return new_blob
 
 
-def transform_tree(tree: git.Tree, transformer: TRANSFORMER) -> git.Tree:
+def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
     hashes = hash_mapping.get()
     contents = []
 
@@ -72,7 +79,7 @@ def transform_tree(tree: git.Tree, transformer: TRANSFORMER) -> git.Tree:
     return new_tree
 
 
-def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit:
+def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit:
     hashes = hash_mapping.get()
     new_tree = transform_tree(commit.tree, transformer)
     author_datetime = "{} {}".format(
@@ -99,8 +106,8 @@ def transform_commit(commit: git.Commit, transformer: TRANSFORMER) -> git.Commit
 
 def map_commits(
     repo: git.Repo,
-    transformer: TRANSFORMER,
-    reference_name_generator: t.Optional[REF_GENERATOR] = None,
+    transformer: Transformer,
+    reference_name_generator: t.Optional[ReferenceNamer] = None,
 ) -> t.Dict[git.Commit, git.Commit]:
     token = hash_mapping.set({})
     commit_mapping = {}
