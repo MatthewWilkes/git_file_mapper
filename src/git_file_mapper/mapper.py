@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import contextvars
 from io import BytesIO
+import fnmatch
 import stat
+import subprocess
+import tempfile
 import typing as t
 
 import git
@@ -30,6 +35,35 @@ class ReferenceNamer(t.Protocol):
 
 def null_transformer(filename: str, contents: bytes) -> bytes:
     return contents
+
+
+def subprocess_transformer(parameters: t.Sequence[str]):
+    """Run a subprocess given by `parameters`.
+    stdin and stdout are used as the parameters"""
+
+    def _transformer(filename: str, contents: bytes) -> bytes:
+        with tempfile.NamedTemporaryFile() as tmpfile:
+            tmpfile.write(contents)
+            tmpfile.flush()
+            tmpfile.seek(0)
+            import time
+
+            time.sleep(1)
+            return subprocess.check_output(
+                parameters, stdin=tmpfile, stderr=subprocess.DEVNULL
+            )
+
+    return _transformer
+
+
+def get_glob_transformer(transformers: t.Dict[str, Transformer]) -> Transformer:
+    def transform_blob(filename: str, contents: bytes) -> bytes:
+        for glob, transformer in transformers.items():
+            if fnmatch.fnmatch(filename, glob):
+                return transformer(filename, contents)
+        return contents
+
+    return transform_blob
 
 
 def transform_blob(blob: git.Blob, transformer: Transformer) -> git.Blob:
@@ -80,6 +114,12 @@ def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
 
 
 def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit:
+    progress: t.Optional[t.Callable[[int], t.Any]]
+    try:
+        progress = progress_indicator.get()
+    except LookupError:
+        progress = None
+
     hashes = hash_mapping.get()
     new_tree = transform_tree(commit.tree, transformer)
     author_datetime = "{} {}".format(
@@ -88,6 +128,9 @@ def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit
     committer_datetime = "{} {}".format(
         commit.committed_date, altz_to_utctz_str(commit.committer_tz_offset)
     )
+
+    if progress:
+        progress(1)
 
     new_parents = [transform_commit(parent, transformer) for parent in commit.parents]
     new_commit = git.Commit.create_from_tree(
@@ -111,19 +154,11 @@ def map_commits(
 ) -> t.Dict[git.Commit, git.Commit]:
     token = hash_mapping.set({})
     commit_mapping = {}
-    progress: t.Optional[t.Callable[[int], t.Any]]
-    try:
-        progress = progress_indicator.get()
-    except LookupError:
-        progress = None
 
     try:
         for branch in repo.branches + repo.tags:
-            for commit in repo.iter_commits(branch):
-                new_commit = transform_commit(commit, transformer)
-                commit_mapping[commit] = new_commit
-                if progress:
-                    progress(1)
+            new_commit = transform_commit(branch.commit, transformer)
+            commit_mapping[branch.commit] = new_commit
             if reference_name_generator:
                 new_name = reference_name_generator(branch.name)
                 new_head = commit_mapping[branch.commit]

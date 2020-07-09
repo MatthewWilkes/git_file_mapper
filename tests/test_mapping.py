@@ -7,7 +7,9 @@ import pytest
 from git_file_mapper.mapper import (
     map_commits,
     transform_commit,
+    subprocess_transformer,
     hash_mapping,
+    get_glob_transformer,
 )
 
 
@@ -142,3 +144,22 @@ def test_convert_commit_includes_parents(git_repo, transform_data):
 
     # We should have transformed the commit, the root tree and one file for 2 commits
     assert len(transform_data) == 6
+
+
+@pytest.mark.skipif(not os.path.exists("/usr/bin/tr"), reason="tr not installed")
+def test_subprocess_transformer():
+    transformer = subprocess_transformer(["tr", "world", "planet"])
+    assert transformer("foo.txt", b"hello world") == b"hennl plane"
+
+
+@pytest.mark.skipif(not os.path.exists("/usr/bin/tr"), reason="tr not installed")
+def test_glob_transformer():
+    txt_transformer = subprocess_transformer(["tr", "world", "planet"])
+    py_transformer = subprocess_transformer(["tr", "one", "two"])
+    transformer = get_glob_transformer(
+        {"*.txt": txt_transformer, "*.py": py_transformer}
+    )
+
+    assert transformer("foo.txt", b"hello world") == b"hennl plane"
+    assert transformer("foo.py", b"hello world") == b"hollt wtrld"
+    assert transformer("foo.md", b"hello world") == b"hello world"
