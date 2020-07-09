@@ -15,7 +15,7 @@ from .mapper import (
 
 def suffixer(suffix: str) -> ReferenceNamer:
     def add_suffix(reference_name: str) -> str:
-        return reference_name + "_" + suffix
+        return reference_name + "-" + suffix
 
     return add_suffix
 
