@@ -121,6 +121,9 @@ def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
         new_tree_obj = tree.repo.odb.info(binsha)
 
     new_tree = tree.repo.tree(new_tree_obj.hexsha.decode("ascii"))
+    new_tree.path = tree.path
+    new_tree.mode = tree.mode
+
     return new_tree
 
 
