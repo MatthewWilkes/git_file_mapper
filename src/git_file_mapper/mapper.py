@@ -54,13 +54,13 @@ def subprocess_transformer(parameters: t.Sequence[str]):
 
 
 def get_glob_transformer(transformers: t.Dict[str, Transformer]) -> Transformer:
-    def transform_blob(filename: str, contents: bytes) -> bytes:
+    def transform_glob(filename: str, contents: bytes) -> bytes:
         for glob, transformer in transformers.items():
             if fnmatch.fnmatch(filename, glob):
                 return transformer(filename, contents)
         return contents
 
-    return transform_blob
+    return transform_glob
 
 
 def transform_blob(blob: git.Blob, transformer: Transformer) -> git.Blob:
