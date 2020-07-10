@@ -98,7 +98,8 @@ def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
             if subtree.binsha not in hashes:
                 new_tree = transform_tree(subtree, transformer)
             else:
-                new_tree = subtree
+                binsha = hashes[subtree.binsha]
+                new_tree = tree.repo.odb.info(binsha)
             contents.append((new_tree.binsha, stat.S_IFDIR, subtree.name))
 
         with BytesIO() as new_tree_stream:

@@ -104,6 +104,76 @@ def test_apply_mapper(git_repo):
     assert new_HEAD.parents == [new_first]
 
 
+def test_trees_are_converted(empty_git_repo, root):
+    repo = empty_git_repo
+
+    for part in ["foo", "bar", "baz"]:
+        root = filename = os.path.join(root, part)
+        os.mkdir(root)
+
+    filename = os.path.join(root, "one.py")
+    with open(filename, "wt", encoding="utf-8") as pfile:
+        pfile.write('print("hello world")\n')
+    repo.index.add([filename])
+    repo.index.commit("add hello world")
+
+    with open(filename, "a", encoding="utf-8") as pfile:
+        pfile.write('print("oh, brave new world")\n')
+    repo.index.add([filename])
+    repo.index.commit("add second message")
+
+    replaced = map_commits(repo, world_transformer)
+
+    HEAD = repo.head.commit
+    first = HEAD.parents[0]
+    assert "hello world" in repo.git.show(first)
+    assert "brave new world" in repo.git.show(HEAD)
+
+    new_HEAD = replaced[HEAD]
+    new_first = replaced[first]
+    assert "hello planet" in repo.git.show(new_first)
+    assert "brave new planet" in repo.git.show(new_HEAD)
+
+    assert first.author == new_first.author
+    assert first.authored_datetime == new_first.authored_datetime
+    assert new_HEAD.parents == [new_first]
+
+
+def test_unchanged_trees_are_cached(empty_git_repo, root):
+    """When we have subtrees with files that are unchanged, new commits should
+    not cause them to revert."""
+    repo = empty_git_repo
+    repo_root = root
+
+    for part in ["foo", "bar", "baz"]:
+        root = filename = os.path.join(root, part)
+        os.mkdir(root)
+
+    filename = os.path.join(root, "one.py")
+    with open(filename, "wt", encoding="utf-8") as pfile:
+        pfile.write('print("hello world")\n')
+    repo.index.add([filename])
+    repo.index.commit("add hello world")
+
+    with open(filename, "a", encoding="utf-8") as pfile:
+        pfile.write('print("oh, brave new world")\n')
+    repo.index.add([filename])
+    repo.index.commit("add second message")
+
+    filename = os.path.join(repo_root, "one.py")
+    with open(filename, "a", encoding="utf-8") as pfile:
+        pfile.write('print("Root change")\n')
+    repo.index.add([filename])
+    repo.index.commit("change root message")
+
+    replaced = map_commits(repo, world_transformer)
+
+    HEAD = repo.head.commit
+    new_HEAD = replaced[HEAD]
+
+    assert "foo/bar/baz/one.py" not in repo.git.show(new_HEAD)
+
+
 def test_apply_mapper_finds_branches(branched_git_repo):
     replaced = map_commits(branched_git_repo, world_transformer)
 
