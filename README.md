@@ -11,9 +11,8 @@ The reason I created this is to allow the creation of read-only parallel trees t
 For example, to apply black to all Python files and save references with a suffix, so `main` becomes `main-black`,
 do:
 
-    $ git-map-files black --map "*.py" "black -"
+    $ git-map-files black --transform "*.py" "black -"
 
-You may pass any number of `--map` arguments. They will be parsed in order, with the first matching transform being the
-only one that's applied. If no transforms match then no change is made.
+You may pass any number of `--transform` arguments. They will be parsed in order, with the first matching transform being the only one that's applied. If no transforms match then no change is made.
 
 This will create variants of all branches and tags, so you must ensure that there are no conflicts before running.
