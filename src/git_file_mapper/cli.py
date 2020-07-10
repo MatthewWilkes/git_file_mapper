@@ -33,14 +33,21 @@ def mapper(suffix, transform) -> None:
         renamer = suffixer(suffix)
 
     repo = git.Repo(os.getcwd())
-    num_commits = 0
+    num_objects = 0
+    discovered_objects = set()
     with click.progressbar(
         repo.branches + repo.tags, label="Resolving references"
     ) as bar:
         for ref in bar:
-            num_commits += sum(1 for x in repo.iter_commits(ref))
+            objects = repo.git.rev_list("--objects", ref).split("\n")
+            hashes = {obj.split(" ")[0] for obj in objects}
+            discovered_objects.update(hashes)
 
-    with click.progressbar(label="Commits", length=num_commits) as progressbar:
+    num_objects = len(discovered_objects)
+
+    with click.progressbar(
+        label="Rewriting objects", length=num_objects
+    ) as progressbar:
         click.secho(progressbar.format_progress_line(), nl=False)  # type: ignore
         token = progress_indicator.set(progressbar.update)
         try:

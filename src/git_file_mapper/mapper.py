@@ -75,6 +75,13 @@ def transform_blob(blob: git.Blob, transformer: Transformer) -> git.Blob:
                 IStream(git.Blob.type, len(new_contents), stream)
             )
         hashes[blob.binsha] = new_blob.binsha
+
+        progress: t.Optional[t.Callable[[int], t.Any]]
+        try:
+            progress_indicator.get()(1)
+        except LookupError:
+            pass
+
     else:
         binsha = hashes[blob.binsha]
         new_blob = blob.repo.odb.info(binsha)
@@ -105,6 +112,13 @@ def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
                 IStream(git.Tree.type, length, new_tree_stream)
             )
         hashes[tree.binsha] = new_tree_obj.binsha
+
+        progress: t.Optional[t.Callable[[int], t.Any]]
+        try:
+            progress_indicator.get()(1)
+        except LookupError:
+            pass
+
     else:
         binsha = hashes[tree.binsha]
         new_tree_obj = tree.repo.odb.info(binsha)
@@ -114,12 +128,6 @@ def transform_tree(tree: git.Tree, transformer: Transformer) -> git.Tree:
 
 
 def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit:
-    progress: t.Optional[t.Callable[[int], t.Any]]
-    try:
-        progress = progress_indicator.get()
-    except LookupError:
-        progress = None
-
     hashes = hash_mapping.get()
     new_tree = transform_tree(commit.tree, transformer)
     author_datetime = "{} {}".format(
@@ -128,9 +136,6 @@ def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit
     committer_datetime = "{} {}".format(
         commit.committed_date, altz_to_utctz_str(commit.committer_tz_offset)
     )
-
-    if progress:
-        progress(1)
 
     new_parents = [transform_commit(parent, transformer) for parent in commit.parents]
     new_commit = git.Commit.create_from_tree(
@@ -143,7 +148,14 @@ def transform_commit(commit: git.Commit, transformer: Transformer) -> git.Commit
         author_date=author_datetime,
         commit_date=committer_datetime,
     )
-    hashes[commit.binsha] = new_commit.binsha
+    if commit.binsha not in hashes:
+        hashes[commit.binsha] = new_commit.binsha
+
+        try:
+            progress_indicator.get()(1)
+        except LookupError:
+            pass
+
     return new_commit
 
 
