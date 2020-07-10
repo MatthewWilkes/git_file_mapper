@@ -171,6 +171,10 @@ def map_commits(
         for branch in repo.branches + repo.tags:
             new_commit = transform_commit(branch.commit, transformer)
             commit_mapping[branch.commit] = new_commit
+            for old, new in zip(
+                branch.commit.iter_parents(), new_commit.iter_parents()
+            ):
+                commit_mapping[old] = new
             if reference_name_generator:
                 new_name = reference_name_generator(branch.name)
                 new_head = commit_mapping[branch.commit]
