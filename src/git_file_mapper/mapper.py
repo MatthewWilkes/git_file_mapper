@@ -46,9 +46,6 @@ def subprocess_transformer(parameters: t.Sequence[str]):
             tmpfile.write(contents)
             tmpfile.flush()
             tmpfile.seek(0)
-            import time
-
-            time.sleep(1)
             return subprocess.check_output(
                 parameters, stdin=tmpfile, stderr=subprocess.DEVNULL
             )
